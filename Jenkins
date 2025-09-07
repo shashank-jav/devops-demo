@@ -6,11 +6,13 @@ pipeline {
     }
     environment {
         SONARQUBE_ENV = 'MySonarQube'
+        DOCKERHUB_CREDENTIALS = 'dockerhub-creds' // Jenkins credentials ID
+        DOCKER_IMAGE = 'shashank2108/devops-demo'
     }
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/devops-demo.git'
+                git branch: 'main', url: 'https://github.com/shashank-jav/devops-demo.git'
             }
         }
         stage('Build') {
@@ -38,10 +40,40 @@ pipeline {
     }
 }
 
-        stage('Package') {
+        stage('Build Docker Image') {
             steps {
-                bat 'mvn package'
+                script {
+                    bat "docker build -t %DOCKER_IMAGE%:latest ."
+                }
             }
         }
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
+                    bat "docker push %DOCKER_IMAGE%:latest"
+                }
+            }
+        }
+        stage('Deploy to Minikube') {
+            steps {
+                bat "kubectl apply -f k8s-deployment.yaml"
+            }
+        }
+        }
     }
-}
+    
+    post {
+        stage('Package') {
+        success {
+            steps {
+            echo '✅ CI/CD pipeline completed successfully!'
+                bat 'mvn package'
+        }
+            }
+        failure {
+            echo '❌ Pipeline failed — check logs.'
+        }
+        }
+    }
+
